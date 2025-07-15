@@ -13,14 +13,17 @@ A conversational AI assistant for Ralton Hotel, Shillong. This chatbot helps gue
 - 📋 Feedback collection via Google Forms
 
 ---
+## 🧠 System Architecture 
+<img width="1039" height="658" alt="Screenshot 2025-07-15 193916" src="https://github.com/user-attachments/assets/ec22a1f5-e30a-49c8-82bd-968c2b978037" />
 
-## 📸 Demo
+## 📸 Demo Video
 
-> 🔹 *Short video showing chatbot in action (Streamlit + voice/text chat)*
+
+https://github.com/user-attachments/assets/b06e850e-ec0c-4b6d-ada6-2d227a7054fe
 
 ---
 
-## 🧠 Tech Stack
+## 🛠️ Tech Stack
 
 | Layer              | Tool / Framework                         |
 |--------------------|-------------------------------------------|
