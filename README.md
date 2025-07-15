@@ -41,7 +41,16 @@ A conversational AI assistant for Ralton Hotel, Shillong. This chatbot helps gue
    git clone https://github.com/vidhan66/Hotel-Chatbot.git
    cd Hotel-Chatbot
 
-2. Create .env with:
+2. API Key Setup
+
+This project requires a Google Generative AI API key (Gemini Flash 2.0) for response generation.
+
+* Steps to Generate:
+1. Go to [Google AI for Developers](https://ai.google.dev/gemini-api/docs/models).
+2. Sign in with your Google account.
+3. Select "Gemini 2.0 Flash" model and click on try it on Google AI Studio.
+4. Create a new API key under **"Get API Key"** section.
+5. Copy the API key.
     ```bash
     GOOGLE_API_KEY=your_key
 
