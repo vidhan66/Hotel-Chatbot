@@ -1,6 +1,9 @@
 import streamlit as st
-import speech_recognition as sr
 from main import agent_executor
+import whisper
+import sounddevice as sd
+import scipy.io.wavfile as wav
+import tempfile
 
 st.set_page_config(page_title="Ralton Hotel", page_icon="🏨")
 
@@ -13,15 +16,22 @@ if "user_input" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = []
 
-def recognize_speech():
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        st.info("🎤 Listening...")
-        audio = r.listen(source)
-        try:
-            return r.recognize_google(audio)
-        except:
-            return "Sorry, I didn't catch that."
+model = whisper.load_model("base")
+
+def recognize_speech(duration=5, fs=16000):
+    st.info("...")
+
+    try:
+        audio = sd.rec(int(duration * fs), samplerate=fs, channels=1, dtype='int16')
+        sd.wait()
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            wav.write(f.name, fs, audio)
+            result = model.transcribe(f.name)
+            return result["text"]
+
+    except Exception as e:
+        return f"Sorry, I didn't catch your audio {e}"
 
 
 def process_user_input(user_input):
