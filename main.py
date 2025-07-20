@@ -9,6 +9,45 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from pydantic import BaseModel
+import psycopg2
+from typing import Optional
+import re
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY2")
+
+conn = psycopg2.connect(
+    dbname=os.getenv("DB_NAME"),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD"),
+    host=os.getenv("DB_HOST"),
+    port=os.getenv("DB_PORT")
+)
+
+class Food_order(BaseModel):
+    room_no : int
+    order_text : str
+    order_time: Optional[str] = None
+
+class Laundry_request(BaseModel):
+    room_no : int
+    clothes_count : int
+    request_time : Optional[str] = None
+
+class Cleaning_request(BaseModel):
+    room_no : int
+    request_time : Optional[str] = None
+
+class Travel_service(BaseModel):
+    room_no : int
+    travel_type : str
+    destination : str
+    request_time : Optional[str] = None
+
+class Billing(BaseModel):
+    room_no : int
 
 class DestinationInput(BaseModel):
     destination: str
@@ -24,7 +63,7 @@ system_prompt = ChatPromptTemplate.from_messages([
     - Fare estimation
     - Never invent or assume website URLs, links, phone numbers, or email addresses.
     - Only respond with links if they are explicitly retrieved from data or given via tools.
-     
+    - For any other query give the reception number.
     
     If the user ask for any details which will need number, always use ask_hotel_info tool.
     Redirect unrelated queries via the general_chat tool. Always assume user is at Ralton Hotel, Shillong.
@@ -37,14 +76,22 @@ system_prompt = ChatPromptTemplate.from_messages([
 with open("tourist_places.txt", "r", encoding="utf-8") as file:
     tourist_places = file.read()
 
+ITEM_PRICES = {
+    "paneer butter masala": 180,
+    "bpm": 180,
+    "tawa roti": 10,
+    "roti": 10,
+    "aloo sabji": 90,
+    "dal fry": 100,
+    "dal": 100,
+    "salad": 0,
+}
+
 llm = ChatGoogleGenerativeAI(
     model="models/gemini-2.0-flash",
-    temperature=0.8,
-    google_api_key="Your_api_key"
+    temperature=0.8
 )
 
-
-# Load hotel services & tourist data
 loader1 = TextLoader("hotel_services.txt",encoding="utf-8")
 loader2 = TextLoader("tourist_places.txt")
 loader3 = TextLoader("famous_dish.txt")
@@ -60,6 +107,152 @@ vectorstore = Chroma.from_documents(splits, embeddings)
 retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
 hotel_chain = RetrievalQA.from_chain_type(llm=llm, retriever=retriever,verbose = True)
 
+def get_active_user_id_by_room(room_no: int, conn) -> int:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT user_id FROM rooms 
+            WHERE room_no = %s AND check_out IS NULL
+            ORDER BY user_id DESC LIMIT 1
+        """, (room_no,))
+        result = cur.fetchone()
+        if result:
+            return result[0]
+        else:
+            raise ValueError(f"No active user found in room {room_no}")
+def insert_into_db(query, values):
+    with conn.cursor() as cur:
+        cur.execute(query, values)
+        conn.commit()
+
+@tool
+def order_food(data : Food_order) -> str:
+    """Parses user's food order and inserts or updates rows in food_orders table."""
+
+    try:
+        room_no, text = data.room_no, data.order_text.lower()
+        user_id = get_active_user_id_by_room(room_no,conn)
+        pattern = r"(\d+)?\s*([a-zA-Z]+(?:\s[a-zA-Z]+)?)"
+        parsed_items = re.findall(pattern, text)
+
+        items = []
+        for qty, name in parsed_items:
+            name = name.strip()
+            quantity = int(qty) if qty else 1
+
+            if name in ITEM_PRICES:
+                actual_name = name
+            else:
+                matches = [k for k in ITEM_PRICES if name in k]
+                actual_name = matches[0] if matches else None
+
+            if actual_name:
+                amount = ITEM_PRICES[actual_name] * quantity
+                items.append((actual_name, quantity, amount))
+
+        if not items:
+            return "Could not understand any valid items from the order."
+
+        with conn.cursor() as cur:
+            results = []
+            for item_name, quantity, amount in items:
+
+                cur.execute("""
+                    SELECT order_id, quantity FROM food_orders
+                    WHERE user_id = %s AND room_no = %s AND item_name = %s AND status = 'ordered'
+                """, (user_id, room_no, item_name))
+                row = cur.fetchone()
+
+                if row:
+                    order_id, existing_qty = row
+                    new_qty = existing_qty + quantity
+                    new_amount = ITEM_PRICES[item_name] * new_qty
+                    cur.execute("""
+                        UPDATE food_orders SET quantity = %s, amount = %s
+                        WHERE order_id = %s
+                    """, (new_qty, new_amount, order_id))
+                    results.append(f"✅ Updated {item_name}: total {new_qty}")
+                else:
+                    cur.execute("""
+                        INSERT INTO food_orders (user_id, room_no, item_name, quantity, amount, status,order_time)
+                        VALUES (%s, %s, %s, %s, %s, 'ordered',COALESCE(%s, NOW()))
+                    """, (user_id, room_no, item_name, quantity,amount,data.order_time))
+                    results.append(f"🆕 Ordered {item_name}: {quantity}")
+
+            conn.commit()
+        return "\n".join(results)
+
+    except Exception as e:
+        return "There was an error placing your order. Please try again later."
+
+@tool
+def request_laundry(data: Laundry_request) -> str:
+    "Handles laundry requests in database"
+    query = """
+        INSERT INTO laundry_requests (user_id, room_no, clothes_count, request_time)
+        VALUES (%s, %s, %s, COALESCE(%s, NOW()))
+    """
+    room_no , clothes_count , request_time = data.room_no,data.clothes_count,data.request_time
+    user_id = get_active_user_id_by_room(room_no, conn)
+    insert_into_db(query, (user_id, room_no, clothes_count, request_time))
+    return "✅ Laundry request submitted."
+
+@tool
+def request_cleaning(data: Cleaning_request) -> str:
+    "Handles cleaning requests in database"
+    query = """
+        INSERT INTO cleaning_requests (user_id, room_no, request_time)
+        VALUES (%s, %s, COALESCE(%s, NOW()))
+    """
+    room_no, request_time = data.room_no, data.request_time
+    user_id = get_active_user_id_by_room(room_no, conn)
+    insert_into_db(query, (user_id, room_no, request_time))
+    return "✅ Room cleaning scheduled."
+
+@tool
+def book_travel(data: Travel_service) -> str:
+    "Handles travel services in database"
+    query = """
+        INSERT INTO travel_service (user_id, room_no, travel_type, destination, request_time)
+        VALUES (%s, %s, %s, %s, COALESCE(%s, NOW()))
+    """
+    room_no, travel_type, destination, request_time = data.room_no, data.travel_type, data.destination,data.request_time
+    user_id = get_active_user_id_by_room(room_no, conn)
+    insert_into_db(query, (user_id, room_no, travel_type, destination, request_time))
+    return f"✅ Travel request to {data.destination} booked."
+
+@tool
+def generate_bill(data: Billing) -> str:
+    "Generetes bills using database"
+    try:
+        with conn.cursor() as cur:
+            room = int(data.room_no)
+            uid = get_active_user_id_by_room(room,conn)
+            cur.execute("""
+                SELECT COALESCE(SUM(amount), 0) FROM food_orders WHERE user_id = %s AND status = 'completed'
+            """, (uid,))
+            food_total = cur.fetchone()[0]
+            cur.execute("""
+                SELECT COALESCE(SUM(amount), 0) FROM laundry_requests WHERE user_id = %s AND status = 'completed'
+            """, (uid,))
+            laundry_total = cur.fetchone()[0]
+            cur.execute("""
+                SELECT COALESCE(SUM(amount), 0) FROM travel_service WHERE user_id = %s AND status = 'completed'
+            """, (uid,))
+            travel_total = cur.fetchone()[0]
+            cur.execute("""
+                INSERT INTO billing (user_id, room_no, food_total, laundry_total, travel_total)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    food_total = EXCLUDED.food_total,
+                    laundry_total = EXCLUDED.laundry_total,
+                    travel_total = EXCLUDED.travel_total
+            """, (uid, room, food_total, laundry_total, travel_total))
+            conn.commit()
+        return f"✅ Billing updated:\n🧆 Food: ₹{food_total}\n Laundry: ₹{laundry_total}\n Travel: ₹{travel_total}"
+    except Exception as e:
+        conn.rollback()
+        return f"Error generating bill: {e}"
+
 @tool
 def ask_hotel_info(query: str) -> str:
     """Search hotel services,tourist place, and famous dishes info."""
@@ -70,20 +263,8 @@ def general_chat(message: str) -> str:
     """Responds to general conversation or small talk and user queries for which other tools are not useful."""
     return str(llm.invoke(message))
 
-@tool
-def get_booking_form(request_type: str) -> str:
-    """Returns Google Form link for requested booking type (food,cleaning,laundry)."""
-    if "food" in request_type.lower():
-        return "https://forms.gle/Fz9YMS53CjNtirw77"
-    elif "cleaning" in request_type.lower():
-        return "https://forms.gle/Wiqpeanqhtzw2HFk9"
-    elif "laundry" in request_type.lower():
-        return "https://forms.gle/WWduUjDkS6VyyWcu6"
-    else:
-        return "Please contact reception for this service."
-
-@tool
-def travel_fare_estimation(input : DestinationInput) -> str:
+@tool(args_schema=DestinationInput)
+def travel_fare_estimation(destination : str) -> str:
     """Estimates travel options and taxi fare to a tourist spot based on distance and terrain from tourist_places.txt"""
     prompt = PromptTemplate(
         template="""
@@ -110,10 +291,11 @@ def travel_fare_estimation(input : DestinationInput) -> str:
     input_variables=["destination"]
     )
 
-    format_prompt = prompt.format(destination = input.destination)
+    format_prompt = prompt.format(destination = destination)
     return hotel_chain.invoke(format_prompt)
 
-tools = [ask_hotel_info, get_booking_form, travel_fare_estimation, general_chat]
+tools = [order_food, request_laundry, request_cleaning, book_travel,
+         generate_bill, ask_hotel_info, travel_fare_estimation, general_chat]
 
 agent_executor = AgentExecutor(
     agent=create_tool_calling_agent(llm=llm, prompt=system_prompt, tools=tools),
