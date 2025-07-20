@@ -1,3 +1,4 @@
+from langchain_core.output_parsers import JsonOutputParser
 from langchain.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import PromptTemplate
@@ -11,7 +12,6 @@ from langchain.agents import create_tool_calling_agent, AgentExecutor
 from pydantic import BaseModel
 import psycopg2
 from typing import Optional
-import re
 from dotenv import load_dotenv
 import os
 
@@ -124,65 +124,94 @@ def insert_into_db(query, values):
         cur.execute(query, values)
         conn.commit()
 
+
 @tool
-def order_food(data : Food_order) -> str:
+def order_food(data: Food_order) -> str:
     """Parses user's food order and inserts or updates rows in food_orders table."""
+    prompt = PromptTemplate.from_template("""
+    You are a hotel assistant. The user will give a food order in natural language.
+    Your task is to extract all items and create a SINGLE combined order entry with total amount calculation.
+
+    Available items and prices: {available_items}
+
+    Respond only with valid JSON in this exact format, no extra text or markdown:
+    {{
+        "combined_items": "item1 x quantity1, item2 x quantity2",
+        "total_quantity": total_count_of_all_items,
+        "total_amount": calculated_total_amount_using_prices_above
+    }}
+    Example:
+    User: I want 2 dal and 3 roti
+    (Assuming dal costs 50 and roti costs 10)
+    Response: {{
+        "combined_items": "dal x2, roti x3",
+        "total_quantity": 5,
+        "total_amount": 130
+    }}
+    User: {order_text}
+    """)
+    parser = JsonOutputParser()
+    chain = prompt | llm | parser
 
     try:
         room_no, text = data.room_no, data.order_text.lower()
-        user_id = get_active_user_id_by_room(room_no,conn)
-        pattern = r"(\d+)?\s*([a-zA-Z]+(?:\s[a-zA-Z]+)?)"
-        parsed_items = re.findall(pattern, text)
+        user_id = get_active_user_id_by_room(room_no, conn)
 
-        items = []
-        for qty, name in parsed_items:
-            name = name.strip()
-            quantity = int(qty) if qty else 1
+        available_items_str = ", ".join([f"{item}: ₹{price}" for item, price in ITEM_PRICES.items()])
+        llm_response = chain.invoke({
+            "order_text": text,
+            "available_items": available_items_str
+        })
 
-            if name in ITEM_PRICES:
-                actual_name = name
-            else:
-                matches = [k for k in ITEM_PRICES if name in k]
-                actual_name = matches[0] if matches else None
+        if not all(key in llm_response for key in ["combined_items", "total_quantity", "total_amount"]):
+            return "Error: Incomplete order information received."
 
-            if actual_name:
-                amount = ITEM_PRICES[actual_name] * quantity
-                items.append((actual_name, quantity, amount))
+        combined_item_name = llm_response.get("combined_items", "").strip()
+        total_quantity = int(llm_response.get("total_quantity", 0))
+        total_amount = float(llm_response.get("total_amount", 0))
 
-        if not items:
-            return "Could not understand any valid items from the order."
+        if not combined_item_name or total_quantity <= 0 or total_amount <= 0:
+            available_items = ", ".join(ITEM_PRICES.keys())
+            return f"Could not create valid order. Available items: {available_items}"
 
         with conn.cursor() as cur:
-            results = []
-            for item_name, quantity, amount in items:
+
+            cur.execute("""
+                SELECT order_id, item_name, quantity, amount FROM food_orders
+                WHERE user_id = %s AND room_no = %s AND status = 'ordered'
+                ORDER BY order_time DESC LIMIT 1
+            """, (user_id, room_no))
+            existing_row = cur.fetchone()
+
+            if existing_row:
+                order_id, existing_item_name, existing_qty, existing_amount = existing_row
+
+                updated_item_name = f"{existing_item_name}, {combined_item_name}"
+                updated_quantity = existing_qty + total_quantity
+                updated_amount = existing_amount + total_amount
 
                 cur.execute("""
-                    SELECT order_id, quantity FROM food_orders
-                    WHERE user_id = %s AND room_no = %s AND item_name = %s AND status = 'ordered'
-                """, (user_id, room_no, item_name))
-                row = cur.fetchone()
+                    UPDATE food_orders SET item_name = %s, quantity = %s, amount = %s
+                    WHERE order_id = %s
+                """, (updated_item_name, updated_quantity, updated_amount, order_id))
 
-                if row:
-                    order_id, existing_qty = row
-                    new_qty = existing_qty + quantity
-                    new_amount = ITEM_PRICES[item_name] * new_qty
-                    cur.execute("""
-                        UPDATE food_orders SET quantity = %s, amount = %s
-                        WHERE order_id = %s
-                    """, (new_qty, new_amount, order_id))
-                    results.append(f"✅ Updated {item_name}: total {new_qty}")
-                else:
-                    cur.execute("""
-                        INSERT INTO food_orders (user_id, room_no, item_name, quantity, amount, status,order_time)
-                        VALUES (%s, %s, %s, %s, %s, 'ordered',COALESCE(%s, NOW()))
-                    """, (user_id, room_no, item_name, quantity,amount,data.order_time))
-                    results.append(f"🆕 Ordered {item_name}: {quantity}")
+                result = f"✅ Updated order: {combined_item_name} (Total items: {updated_quantity}, Total: ₹{updated_amount})"
+            else:
+
+                cur.execute("""
+                    INSERT INTO food_orders (user_id, room_no, item_name, quantity, amount, status, order_time)
+                    VALUES (%s, %s, %s, %s, %s, 'ordered', COALESCE(%s, NOW()))
+                """, (user_id, room_no, combined_item_name, total_quantity, total_amount, data.order_time))
+
+                result = f"🆕 Order placed: {combined_item_name} (Total items: {total_quantity}, Total: ₹{total_amount})"
 
             conn.commit()
-        return "\n".join(results)
+        return result
 
     except Exception as e:
-        return "There was an error placing your order. Please try again later."
+        print(f"General Error: {e}")
+        conn.rollback()
+        return f"There was an error placing your order: {str(e)}"
 
 @tool
 def request_laundry(data: Laundry_request) -> str:
