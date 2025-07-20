@@ -9,8 +9,9 @@ huggingface-hub>=0.21.4
 pydantic>=2.0
 streamlit>=1.34.0
 psycopg2-binary
-whisper
+openai-whisper
 torch
 sounddevice
 scipy
 numpy
+python-dotenv
