@@ -15,3 +15,5 @@ sounddevice
 scipy
 numpy
 python-dotenv
+sentence-transformers
+transformers
