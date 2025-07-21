@@ -16,7 +16,7 @@ if "user_input" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = []
 
-model = whisper.load_model("base")
+model = whisper.load_model("tiny")
 
 def recognize_speech(duration=5, fs=16000):
     st.info("...")
