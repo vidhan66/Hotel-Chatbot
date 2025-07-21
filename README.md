@@ -10,30 +10,31 @@ A conversational AI assistant for Ralton Hotel, Shillong. This chatbot helps gue
 - 🗺️ Recommend tourist attractions & local dishes
 - 🚕 Estimate taxi fare to destinations
 - 🗣️ Voice input supported via microphone
+- 📓 Booking system
 - 📋 Feedback collection via Google Forms
 
 ---
 ## 🧠 System Architecture 
-<img width="1039" height="658" alt="Screenshot 2025-07-15 193916" src="https://github.com/user-attachments/assets/ec22a1f5-e30a-49c8-82bd-968c2b978037" />
+<img width="898" height="665" alt="Screenshot 2025-07-21 144644" src="https://github.com/user-attachments/assets/02516cb9-6f16-4e78-8da4-51eff9cf193f" />
 
 ## 📸 Demo Video
 
-
-https://github.com/user-attachments/assets/b06e850e-ec0c-4b6d-ada6-2d227a7054fe
+https://github.com/user-attachments/assets/8a6e135d-1f5b-4fbb-84a3-2c41132987ac
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer              | Tool / Framework                         |
+| Layer              | Tool / Framework                          |
 |--------------------|-------------------------------------------|
 | LLM                | Gemini 2.0 Flash (Google API)             |
 | Embeddings         | `BAAI/bge-small-en-v1.5` (Hugging Face)   |
 | Vector Store       | ChromaDB                                  |
+| Database           | PostgreSQL                                |
 | Backend Logic      | LangChain Agents + Tools                  |
 | UI                 | Streamlit                                 |
-| Voice Input        | SpeechRecognition (Google Web Speech API) |
-| Deployment         | Localhost           |
+| Voice Input        | OpenAI whisper(tiny)                      |
+| Deployment         | Localhost                                 |
 
 ---
 
@@ -70,11 +71,12 @@ This project requires a Google Generative AI API key (Gemini Flash 2.0) for resp
 - A tourist asks for recommendations near the hotel.
 - Someone needs help booking a taxi to Laitlum Canyon.
 - A user wants to provide feedback after their stay.
-- 
+- Guest wants to book food/laundry/taxi etc.
+  
 ## 🔍 Limitations & Future Enhancements
 - Currently only supports English.
-- No real-time user account system or database integration.
-- Future: Add booking database and payment system.
+- Info is retrieved from the local knowledge base which will need manual updates so, it can’t dynamically learn or adapt to new queries or services added without updating the vector store and will answer directly by invoking LLM.
+- Future: Add payment system.
 
 ## 🔒 Note on Data Privacy
 No sensitive user data is collected. Google Forms used for feedback/bookings are not linked to response sheets.
