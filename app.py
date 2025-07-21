@@ -1,10 +1,3 @@
-import os
-
-os.environ["LANGCHAIN_API_KEY"] = ""
-os.environ["LANGCHAIN_TRACING_V2"] = "false"
-os.environ["LANGCHAIN_TRACING"] = "false"
-os.environ["BROWSER_GATHER_USAGE_STATS"] = "false"
-
 import streamlit as st
 from main import agent_executor
 import whisper
