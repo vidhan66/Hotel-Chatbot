@@ -22,6 +22,9 @@ A conversational AI assistant for Ralton Hotel, Shillong. This chatbot helps gue
 https://github.com/user-attachments/assets/8a6e135d-1f5b-4fbb-84a3-2c41132987ac
 
 ---
+## Hotel Dashboard 
+
+https://github.com/user-attachments/assets/b31bbf9e-2510-4e05-9ff8-1d2f4a0bf524
 
 ## 🛠️ Tech Stack
 
@@ -35,6 +38,7 @@ https://github.com/user-attachments/assets/8a6e135d-1f5b-4fbb-84a3-2c41132987ac
 | UI                 | Streamlit                                 |
 | Voice Input        | OpenAI whisper(tiny)                      |
 | Deployment         | Localhost                                 |
+| Dashboard          | Power BI                                  |
 
 ---
 
