@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
-os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY2")
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY1")
 
 conn = psycopg2.connect(
     dbname=os.getenv("DB_NAME"),
@@ -251,36 +251,34 @@ def book_travel(data: Travel_service) -> str:
 
 @tool
 def generate_bill(data: Billing) -> str:
-    "Generetes bills using database"
+    """Fetches the final billing summary for a user"""
     try:
         with conn.cursor() as cur:
             room = int(data.room_no)
-            uid = get_active_user_id_by_room(room,conn)
+            uid = get_active_user_id_by_room(room, conn)
+
             cur.execute("""
-                SELECT COALESCE(SUM(amount), 0) FROM food_orders WHERE user_id = %s AND status = 'completed'
+                SELECT food_total, laundry_total, travel_total, room_total, other_charges, total_amount
+                FROM billing
+                WHERE user_id = %s
             """, (uid,))
-            food_total = cur.fetchone()[0]
-            cur.execute("""
-                SELECT COALESCE(SUM(amount), 0) FROM laundry_requests WHERE user_id = %s AND status = 'completed'
-            """, (uid,))
-            laundry_total = cur.fetchone()[0]
-            cur.execute("""
-                SELECT COALESCE(SUM(amount), 0) FROM travel_service WHERE user_id = %s AND status = 'completed'
-            """, (uid,))
-            travel_total = cur.fetchone()[0]
-            cur.execute("""
-                INSERT INTO billing (user_id, room_no, food_total, laundry_total, travel_total)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (user_id) DO UPDATE SET
-                    food_total = EXCLUDED.food_total,
-                    laundry_total = EXCLUDED.laundry_total,
-                    travel_total = EXCLUDED.travel_total
-            """, (uid, room, food_total, laundry_total, travel_total))
-            conn.commit()
-        return f"✅ Billing updated:\n🧆 Food: ₹{food_total}\n Laundry: ₹{laundry_total}\n Travel: ₹{travel_total}"
+
+            result = cur.fetchone()
+            if result is None:
+                return f"No billing record found for room {room} (user_id: {uid})"
+
+            food_total, laundry_total, travel_total, room_total, other_charges, total_amount = result
+        return (
+            f"💳 Final Billing for Room {room}:\n"
+            f"🧆 Food: ₹{food_total}\n"
+            f"🧺 Laundry: ₹{laundry_total}\n"
+            f"🚕 Travel: ₹{travel_total}\n"
+            f"🛏️ Room: ₹{room_total}\n"
+            f"🧾 Other Charges: ₹{other_charges}\n"
+            f"📦 Total Amount: ₹{total_amount}"
+        )
     except Exception as e:
-        conn.rollback()
-        return f"Error generating bill: {e}"
+        return f"Error fetching bill: {e}"
 
 @tool
 def ask_hotel_info(query: str) -> str:
