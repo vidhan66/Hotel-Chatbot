@@ -39,6 +39,8 @@ https://github.com/user-attachments/assets/b31bbf9e-2510-4e05-9ff8-1d2f4a0bf524
 | Dashboard          | Power BI                                  |
 
 ---
+## QR code to access the chatbot:
+<img width="370" height="370" alt="hotel_chatbot_qr" src="https://github.com/user-attachments/assets/58394286-b14c-453e-ad3e-b35b73f4ec70" />
 
 ## 🛠️ Setup Instructions
 
