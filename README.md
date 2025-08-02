@@ -19,7 +19,7 @@ A conversational AI assistant for Ralton Hotel, Shillong. This chatbot helps gue
 
 ## 📸 Demo Video
 
-https://github.com/user-attachments/assets/8a6e135d-1f5b-4fbb-84a3-2c41132987ac
+https://github.com/user-attachments/assets/e213a310-1653-4764-870d-52949792b997
 
 ---
 ## Hotel Dashboard 
