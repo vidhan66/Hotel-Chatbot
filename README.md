@@ -10,6 +10,7 @@ A conversational AI assistant for Ralton Hotel, Shillong. This chatbot helps gue
 - 🗺️ Recommend tourist attractions & local dishes
 - 🚕 Estimate taxi fare to destinations
 - 📓 Booking system
+- 📄 Staff Interface
 - 📋 Feedback collection via Google Forms
 
 ---
@@ -37,10 +38,14 @@ https://github.com/user-attachments/assets/b31bbf9e-2510-4e05-9ff8-1d2f4a0bf524
 | UI                 | Streamlit                                 |
 | Deployment         | Render(database) and Hugging Face Spaces(chatbot) |
 | Dashboard          | Power BI                                  |
+| Interface          | Hugging Face Spaces                       |
 
 ---
 ## QR code to access the chatbot:
 <img width="370" height="370" alt="hotel_chatbot_qr" src="https://github.com/user-attachments/assets/58394286-b14c-453e-ad3e-b35b73f4ec70" />
+
+## 🔗Link for Staff Interface
+```https://vidhan66-staff-dashboard.hf.space/```
 
 ## 🛠️ Setup Instructions
 
