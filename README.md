@@ -9,7 +9,6 @@ A conversational AI assistant for Ralton Hotel, Shillong. This chatbot helps gue
 - ✅ Query hotel services (check-in/out time, food, laundry, cleaning)
 - 🗺️ Recommend tourist attractions & local dishes
 - 🚕 Estimate taxi fare to destinations
-- 🗣️ Voice input supported via microphone
 - 📓 Booking system
 - 📋 Feedback collection via Google Forms
 
@@ -36,8 +35,7 @@ https://github.com/user-attachments/assets/b31bbf9e-2510-4e05-9ff8-1d2f4a0bf524
 | Database           | PostgreSQL                                |
 | Backend Logic      | LangChain Agents + Tools                  |
 | UI                 | Streamlit                                 |
-| Voice Input        | OpenAI whisper(tiny)                      |
-| Deployment         | Localhost                                 |
+| Deployment         | Hugging Face Spaces                       |
 | Dashboard          | Power BI                                  |
 
 ---
