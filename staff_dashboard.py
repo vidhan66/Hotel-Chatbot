@@ -13,7 +13,6 @@ def get_connection():
         port=os.getenv("DB_PORT")
     )
 
-# Mark completed with optional amount
 def mark_completed_with_amount(table, request_id, amount=None, amount_column=None):
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -67,7 +66,6 @@ def show_requests_with_amount(table, label, amount_column):
                     else:
                         st.warning("Please enter a valid amount before marking done.")
 
-# Requests without amount (Cleaning)
 def show_requests(table, label):
     st.subheader(f"{label} Requests")
     with get_connection() as conn:
@@ -83,26 +81,42 @@ def show_requests(table, label):
                     st.success(f"{label} request {r[0]} marked completed.")
                     st.rerun()
 
-# Room Manager
 def manage_rooms():
     st.subheader("Room Management")
+
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT room_no, user_id FROM rooms")
+            cur.execute("SELECT user_id, room_no, check_in, check_out, no_of_person, amount FROM rooms")
             rows = cur.fetchall()
+            st.markdown("### Current Rooms")
             for r in rows:
-                st.write(f"Room {r[0]} → User {r[1]}")
+                st.write(
+                    f"User ID: {r[0]} → Room: {r[1]} | Check-in: {r[2]} | Check-out: {r[3]} | "
+                    f"Persons: {r[4]} | Amount: ₹{r[5]}"
+                )
 
-            with st.form("Add Room"):
-                new_room = st.text_input("Room No")
-                new_user = st.text_input("User ID")
-                if st.form_submit_button("Add Room"):
-                    cur.execute("INSERT INTO rooms (room_no, user_id) VALUES (%s, %s)", (new_room, new_user))
+    with st.form("Add Room"):
+        st.markdown("### Add New Room Entry")
+        room_no = st.text_input("Room No")
+        check_in = st.date_input("Check-in Date")
+        check_out = st.date_input("Check-out Date")
+        no_of_person = st.number_input("Number of Persons", min_value=1, step=1)
+        amount = st.number_input("Room Amount (₹)", min_value=0, step=100)
+
+        if st.form_submit_button("Add Room"):
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO rooms (room_no, check_in, check_out, no_of_person, amount)
+                        VALUES (%s, %s, %s, %s, %s)
+                        RETURNING user_id
+                    """, (room_no, check_in, check_out, no_of_person, amount))
+                    new_id = cur.fetchone()[0]
                     conn.commit()
-                    st.success("Room added!")
+                    st.success(f"Room {room_no} added with User ID {new_id}.")
                     st.rerun()
 
-# Billing Summary
+
 def show_billing():
     st.subheader("Billing Summary")
     with get_connection() as conn:
@@ -110,9 +124,12 @@ def show_billing():
             cur.execute("SELECT * FROM billing")
             rows = cur.fetchall()
             for r in rows:
-                st.write(f"User {r[1]} | Room {r[2]} | Food: ₹{r[3]} | Laundry: ₹{r[4]} | Travel: ₹{r[5]} | Other: ₹{r[6]} | Total: ₹{r[7]}")
+                st.write(
+                    f"User {r[1]} | Room {r[2]} | "
+                    f"Food: ₹{r[3]} | Laundry: ₹{r[4]} | Travel: ₹{r[5]} | Other: ₹{r[6]} | "
+                    f"Room Charges: ₹{r[7]} | Total: ₹{r[8]}"
+                )
 
-# Streamlit App
 st.title("🏨 Hotel Staff Dashboard")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
