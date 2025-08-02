@@ -35,7 +35,7 @@ https://github.com/user-attachments/assets/b31bbf9e-2510-4e05-9ff8-1d2f4a0bf524
 | Database           | PostgreSQL                                |
 | Backend Logic      | LangChain Agents + Tools                  |
 | UI                 | Streamlit                                 |
-| Deployment         | Hugging Face Spaces                       |
+| Deployment         | Render(database) and Hugging Face Spaces(chatbot) |
 | Dashboard          | Power BI                                  |
 
 ---
