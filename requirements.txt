@@ -10,10 +10,7 @@ huggingface-hub
 pydantic
 streamlit
 psycopg2-binary
-openai-whisper
 torch
-sounddevice
-scipy
 numpy
 python-dotenv
 sentence-transformers
