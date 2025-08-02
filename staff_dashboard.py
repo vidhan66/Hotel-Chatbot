@@ -12,23 +12,23 @@ def get_connection():
         host=os.getenv("DB_HOST"),
         port=os.getenv("DB_PORT")
     )
-
 def mark_completed_with_amount(table, request_id, amount=None, amount_column=None):
+    id_column = "order_id" if table == "food_orders" else "request_id"
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             if amount is not None and amount_column:
                 cur.execute(
-                    f"UPDATE {table} SET status = 'completed', amount = %s WHERE request_id = %s",
+                    f"UPDATE {table} SET status = 'completed', {amount_column} = %s WHERE {id_column} = %s",
                     (amount, request_id)
                 )
             else:
                 cur.execute(
-                    f"UPDATE {table} SET status = 'completed' WHERE request_id = %s",
+                    f"UPDATE {table} SET status = 'completed' WHERE {id_column} = %s",
                     (request_id,)
                 )
             conn.commit()
 
-# Generic food order handler
 def show_orders(table, label):
     st.subheader(f"{label} Orders")
     with get_connection() as conn:
@@ -89,17 +89,30 @@ def manage_rooms():
             cur.execute("SELECT user_id, room_no, check_in, check_out, no_of_person, amount FROM rooms")
             rows = cur.fetchall()
             st.markdown("### Current Rooms")
+
             for r in rows:
                 st.write(
                     f"User ID: {r[0]} → Room: {r[1]} | Check-in: {r[2]} | Check-out: {r[3]} | "
                     f"Persons: {r[4]} | Amount: ₹{r[5]}"
                 )
 
+                # Add a button to mark checkout manually
+                if r[3] is None:  # Only show if check-out is not already set
+                    if st.button(f"Mark Checkout for Room {r[1]} (User ID {r[0]})"):
+                        with get_connection() as conn2:
+                            with conn2.cursor() as cur2:
+                                cur2.execute("""
+                                    UPDATE rooms SET check_out = NOW()
+                                    WHERE user_id = %s
+                                """, (r[0],))
+                                conn2.commit()
+                                st.success(f"Checkout marked for User ID {r[0]} in Room {r[1]}")
+                                st.rerun()
+
     with st.form("Add Room"):
         st.markdown("### Add New Room Entry")
         room_no = st.text_input("Room No")
         check_in = st.date_input("Check-in Date")
-        check_out = st.date_input("Check-out Date")
         no_of_person = st.number_input("Number of Persons", min_value=1, step=1)
         amount = st.number_input("Room Amount (₹)", min_value=0, step=100)
 
@@ -108,9 +121,9 @@ def manage_rooms():
                 with conn.cursor() as cur:
                     cur.execute("""
                         INSERT INTO rooms (room_no, check_in, check_out, no_of_person, amount)
-                        VALUES (%s, %s, %s, %s, %s)
+                        VALUES (%s, %s, NULL, %s, %s)
                         RETURNING user_id
-                    """, (room_no, check_in, check_out, no_of_person, amount))
+                    """, (room_no, check_in, no_of_person, amount))
                     new_id = cur.fetchone()[0]
                     conn.commit()
                     st.success(f"Room {room_no} added with User ID {new_id}.")
