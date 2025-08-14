@@ -1,6 +1,8 @@
 Hotel Name: Ralton Hotel
 Hotel Location: Shillong, Meghalaya, India
 Staff/Reception/Hotel/Front desk number = 0000000000
+- We have total 5 floors(including ground floor) each having 30 rooms form 1 to 30 room number.
+example- 1st floor (101 to 130)
 
 Welcome to Ralton Hotel. Below are the services and policies we offer:
 
@@ -9,10 +11,11 @@ Check-in and Check-out:
 - The Check-out time at Ralton hotel is 8:00 PM
 - Early check-in and late check-out are subject to availability and may incur additional charges.
 
-Room Service:
+Room & Food Service:
 - Available 24/7 via room phone or chatbot
-- Menu includes Indian, Italian, and Chinese cuisine
-- Food can be ordered until 11:00 PM
+- Food can be ordered until 11:00 PM (including Breakfast, Lunch and Dinner)
+- Room charge is ₹1200 per day(including night) and ₹700 per night(if booking is only for night).
+- Only 4 people are allowed in one room
 
 Wi-Fi:
 - Free Wi-Fi available in all rooms
@@ -23,11 +26,6 @@ Laundry Service:
 - The Laundry services are available daily from 8:00 AM to 6:00 PM
 - Same-day delivery if submitted before 10:00 AM
 - Express service available at extra charge
-
-Restaurant:
-- Breakfast: 7:00 AM – 10:00 AM
-- Lunch: 12:30 PM – 3:00 PM
-- Dinner: 8:00 PM – 10:30 PM
 
 Housekeeping:
 - Daily cleaning between 9:00 AM – 11:00 AM

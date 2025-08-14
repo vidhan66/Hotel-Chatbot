@@ -14,6 +14,8 @@ import psycopg2
 from typing import Optional
 from dotenv import load_dotenv
 import os
+from datetime import date
+import math
 
 load_dotenv()
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY1")
@@ -46,6 +48,14 @@ class Travel_service(BaseModel):
     destination : str
     request_time : Optional[str] = None
 
+class Rooms_booking(BaseModel):
+    check_in : date
+    no_of_person : int
+    days : Optional[int] = None
+    nights : Optional[int] = None
+    preferred_floor : Optional[int] = None
+    confirm: Optional[bool] = None
+
 class Billing(BaseModel):
     room_no : int
 
@@ -53,25 +63,38 @@ class DestinationInput(BaseModel):
     destination: str
 
 system_prompt = ChatPromptTemplate.from_messages([
-    ("system","""
-    You are a helpful assistant for Ralton Hotel in Shillong.
+    ("system", """
+    You are a helpful assistant for Ralton Hotel, Shillong.
 
-    Only handle:
-    - Tourist and Famous dishes recommendations
-    - Travel Options
-    - Hotel services (check in/check out time, last kitchen order time,food, laundry, cleaning)
-    - Fare estimation
-    - Never invent or assume website URLs, links, phone numbers, or email addresses.
-    - Only respond with links if they are explicitly retrieved from data or given via tools.
+    You can handle:
+    - Tourist and famous dish recommendations.
+    - Travel options and bookings.
+    - Hotel services: check-in/check-out time, last kitchen order time, food, laundry, cleaning.
+    - Fare estimation.
+    - Room bookings:
+        * Ask for arrival date, number of persons, and stay duration (days or nights).
+        * Only 4 people allowed per room.
+        * If more, ask if the guest wants multiple rooms.
+        * If a floor preference is given, try to assign from that floor.
+        * Check available rooms in the database.
+        * Get room prices from hotel_services.txt.
+        * Show estimated cost and confirm before booking.
+        * On confirmation, insert into the rooms table with check_out as NULL.
+    - Checkout:
+        * If the guest says they want to checkout, confirm with them first.
+        * On confirmation, update their check_out date in the rooms table to today's date.
+
+    Rules:
+    - Never invent contact info or links.
+    - Use ask_hotel_info tool for any hotel data you don’t know.
+    - Redirect unrelated queries via the general_chat tool.
     - For any other query give the reception number.
-    
-    If the user ask for any details which will need number, always use ask_hotel_info tool.
-    Redirect unrelated queries via the general_chat tool. Always assume user is at Ralton Hotel, Shillong.
     """),
-    MessagesPlaceholder(variable_name ="chat_history"),
+    MessagesPlaceholder(variable_name="chat_history"),
     ("human", "{input}"),
     MessagesPlaceholder(variable_name="agent_scratchpad")
 ])
+
 
 with open("tourist_places.txt", "r", encoding="utf-8") as file:
     tourist_places = file.read()
@@ -123,7 +146,65 @@ def insert_into_db(query, values):
     with conn.cursor() as cur:
         cur.execute(query, values)
         conn.commit()
+def get_available_rooms(conn, preferred_floor=None):
+    cursor = conn.cursor()
+    if preferred_floor is not None:
+        start_room = (preferred_floor * 100) + 1 if preferred_floor > 0 else 1
+        end_room = start_room + 29
+        cursor.execute("""
+            SELECT room_no FROM rooms
+            WHERE (check_out IS NOT NULL OR check_in IS NULL)
+            AND room_no BETWEEN %s AND %s
+        """, (start_room, end_room))
+    else:
+        cursor.execute("""
+            SELECT room_no FROM rooms
+            WHERE (check_out IS NOT NULL OR check_in IS NULL)
+        """)
+    return [row[0] for row in cursor.fetchall()]
 
+@tool
+def book_room(data: Rooms_booking) -> str:
+    check_in = data.check_in
+    no_of_persons = data.no_of_persons
+    days = data.days or 0
+    nights = data.nights or 0
+    preferred_floor = data.preferred_floor
+    confirm = data.confirm
+
+    price_day = int(ask_hotel_info("What is the price per day for a room?").split()[0].replace("₹", ""))
+    price_night = int(ask_hotel_info("What is the price per night for a room?").split()[0].replace("₹", ""))
+    max_people_per_room = int(ask_hotel_info("How many people are allowed in one room?").split()[0])
+
+    rooms_needed = math.ceil(no_of_persons / max_people_per_room)
+
+    available_rooms = get_available_rooms(conn, preferred_floor)
+    if len(available_rooms) < rooms_needed:
+        return f"❌ Only {len(available_rooms)} rooms available. Cannot book {rooms_needed}."
+
+    if days > 0:
+        price_one_room = days * price_day
+    else:
+        price_one_room = nights * price_night
+    estimated_total_price = price_one_room * rooms_needed
+
+    if confirm is None:
+        return f"🛏️ You need {rooms_needed} room(s). Estimated cost is ₹{estimated_total_price}. Should I proceed with booking? (yes/no)"
+
+    if not confirm:
+        return "✅ Booking cancelled."
+
+    assigned_rooms = available_rooms[:rooms_needed]
+
+    cursor = conn.cursor()
+    for room_no in assigned_rooms:
+        cursor.execute("""
+            INSERT INTO rooms (room_no, check_in, check_out, no_of_person, amount)
+            VALUES (%s, %s, NULL, %s, %s)
+        """, (room_no, check_in, no_of_persons, price_one_room))
+    conn.commit()
+
+    return f"✅ Booked {rooms_needed} room(s) {assigned_rooms} from {check_in} for {days or nights} day(s)/night(s). Total cost ₹{estimated_total_price}."
 
 @tool
 def order_food(data: Food_order) -> str:
