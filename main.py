@@ -14,11 +14,12 @@ import psycopg2
 from typing import Optional
 from dotenv import load_dotenv
 import os
+import re
 from datetime import date
 import math
 
 load_dotenv()
-os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY1")
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY2")
 
 conn = psycopg2.connect(
     dbname=os.getenv("DB_NAME"),
@@ -50,10 +51,15 @@ class Travel_service(BaseModel):
 
 class Rooms_booking(BaseModel):
     check_in : date
-    no_of_person : int
+    no_of_persons : int
+    room_no : Optional[int]=None
     days : Optional[int] = None
     nights : Optional[int] = None
     preferred_floor : Optional[int] = None
+    confirm: Optional[bool] = None
+
+class CheckoutRoom(BaseModel):
+    room_no: int
     confirm: Optional[bool] = None
 
 class Billing(BaseModel):
@@ -80,13 +86,19 @@ system_prompt = ChatPromptTemplate.from_messages([
         * Get room prices from hotel_services.txt.
         * Show estimated cost and confirm before booking.
         * On confirmation, insert into the rooms table with check_out as NULL.
+        * When filling check_in, always use YYYY-MM-DD format.
+    - Room booking extension:
+        * If the guest has an active booking (check_out is NULL), allow them to extend their stay.
+        * Ask how many extra days/nights they want to stay.
+        * Calculate extra charges from hotel_services.txt.
+        * Confirm with them before updating the booking in the rooms table (update amount, and optionally check_out).
     - Checkout:
         * If the guest says they want to checkout, confirm with them first.
         * On confirmation, update their check_out date in the rooms table to today's date.
 
     Rules:
     - Never invent contact info or links.
-    - Use ask_hotel_info tool for any hotel data you don’t know.
+    - Use ask_hotel_info tool for any hotel data and price info you don’t know.
     - Redirect unrelated queries via the general_chat tool.
     - For any other query give the reception number.
     """),
@@ -147,38 +159,90 @@ def insert_into_db(query, values):
         cur.execute(query, values)
         conn.commit()
 def get_available_rooms(conn, preferred_floor=None):
-    cursor = conn.cursor()
-    if preferred_floor is not None:
-        start_room = (preferred_floor * 100) + 1 if preferred_floor > 0 else 1
+
+    all_rooms = []
+    for floor in range(5):  # floors 0 to 4 (ground + 4 floors)
+        start_room = floor * 100 + 1 if floor > 0 else 1
         end_room = start_room + 29
-        cursor.execute("""
-            SELECT room_no FROM rooms
-            WHERE (check_out IS NOT NULL OR check_in IS NULL)
-            AND room_no BETWEEN %s AND %s
-        """, (start_room, end_room))
-    else:
-        cursor.execute("""
-            SELECT room_no FROM rooms
-            WHERE (check_out IS NOT NULL OR check_in IS NULL)
-        """)
-    return [row[0] for row in cursor.fetchall()]
+        all_rooms.extend(range(start_room, end_room + 1))
+
+    if preferred_floor is not None:
+        start_room = preferred_floor * 100 + 1 if preferred_floor > 0 else 1
+        end_room = start_room + 29
+        all_rooms = [r for r in all_rooms if start_room <= r <= end_room]
+
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT room_no
+        FROM rooms
+        WHERE check_out IS NULL
+    """)
+    booked_rooms = {row[0] for row in cursor.fetchall()}
+
+    available_rooms = [room for room in all_rooms if room not in booked_rooms]
+    return available_rooms
 
 @tool
 def book_room(data: Rooms_booking) -> str:
+    "Handles booking of room in database"
     check_in = data.check_in
+    print(check_in)
     no_of_persons = data.no_of_persons
+    room_no = data.room_no
     days = data.days or 0
     nights = data.nights or 0
     preferred_floor = data.preferred_floor
     confirm = data.confirm
 
-    price_day = int(ask_hotel_info("What is the price per day for a room?").split()[0].replace("₹", ""))
-    price_night = int(ask_hotel_info("What is the price per night for a room?").split()[0].replace("₹", ""))
-    max_people_per_room = int(ask_hotel_info("How many people are allowed in one room?").split()[0])
-
+    price_day = int(re.search(r"\d+", (lambda r: (r["result"] if isinstance(r, dict) else r))(ask_hotel_info("Tell me the exact room charge per day including night in ₹ only."))).group())
+    print(price_day)
+    price_night = int(re.search(r"\d+", (lambda r: (r["result"] if isinstance(r, dict) else r))(ask_hotel_info("Tell me the exact room charge per night in ₹ only."))).group())
+    print(price_night)
+    max_people_per_room = 4
     rooms_needed = math.ceil(no_of_persons / max_people_per_room)
 
+    cursor = conn.cursor()
+    active_booking = None
+    if room_no:
+        cursor.execute("""
+                SELECT room_no, check_in, check_out, amount
+                FROM rooms
+                WHERE room_no = %s AND check_out IS NULL
+                ORDER BY check_in DESC
+                LIMIT 1
+            """, (room_no,))
+        active_booking = cursor.fetchone()
+
+    # extension
+    if active_booking :
+        print("extension call")
+        room_no, old_check_in, old_check_out, old_amount = active_booking
+
+        if days > 0:
+            extra_amount = days * price_day
+        else:
+            extra_amount = nights * price_night
+
+        new_total_amount = old_amount + extra_amount
+
+        if confirm is None:
+            return f"🛏️ You already have room {room_no}. Extending stay will cost ₹{extra_amount}. New total will be ₹{new_total_amount}. Should I proceed? (yes/no)"
+
+        if not confirm:
+            return "✅ Extension cancelled."
+
+        cursor.execute("""
+                    UPDATE rooms
+                    SET amount = %s
+                    WHERE room_no = %s AND check_out IS NULL
+                """, (new_total_amount, room_no))
+        conn.commit()
+
+        return f"✅ Stay extended in room {room_no}. New total amount is ₹{new_total_amount}."
+    # new booking
+    print("new call")
     available_rooms = get_available_rooms(conn, preferred_floor)
+    print(available_rooms)
     if len(available_rooms) < rooms_needed:
         return f"❌ Only {len(available_rooms)} rooms available. Cannot book {rooms_needed}."
 
@@ -205,6 +269,41 @@ def book_room(data: Rooms_booking) -> str:
     conn.commit()
 
     return f"✅ Booked {rooms_needed} room(s) {assigned_rooms} from {check_in} for {days or nights} day(s)/night(s). Total cost ₹{estimated_total_price}."
+
+@tool
+def checkout_room(data: CheckoutRoom) -> str:
+    "Handles room checkouts"
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT amount
+        FROM rooms
+        WHERE room_no = %s AND check_out IS NULL
+        ORDER BY check_in DESC
+        LIMIT 1
+    """, (data.room_no,))
+    row = cursor.fetchone()
+
+    if not row:
+        return f"❌ No active booking found for room {data.room_no}."
+
+    total_amount = row[0]
+
+    if data.confirm is None:
+        return f"💰 Your total bill is ₹{total_amount}. Are you sure you want to checkout? (yes/no)"
+
+    if not data.confirm:
+        return "✅ Checkout cancelled."
+
+    cursor.execute("""
+        UPDATE rooms
+        SET check_out = CURRENT_DATE
+        WHERE room_no = %s AND check_out IS NULL
+    """, (data.room_no,))
+    conn.commit()
+
+    return f"✅ Checked out from room {data.room_no}. Final bill: ₹{total_amount}."
+
 
 @tool
 def order_food(data: Food_order) -> str:
@@ -402,7 +501,7 @@ def travel_fare_estimation(destination : str) -> str:
     format_prompt = prompt.format(destination = destination)
     return hotel_chain.invoke(format_prompt)
 
-tools = [order_food, request_laundry, request_cleaning, book_travel,
+tools = [book_room,checkout_room,order_food, request_laundry, request_cleaning, book_travel,
          generate_bill, ask_hotel_info, travel_fare_estimation, general_chat]
 
 agent_executor = AgentExecutor(

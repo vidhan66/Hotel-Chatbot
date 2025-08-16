@@ -3,6 +3,7 @@ Hotel Location: Shillong, Meghalaya, India
 Staff/Reception/Hotel/Front desk number = 0000000000
 - We have total 5 floors(including ground floor) each having 30 rooms form 1 to 30 room number.
 example- 1st floor (101 to 130)
+- Max 4 persons per room are allowed.
 
 Welcome to Ralton Hotel. Below are the services and policies we offer:
 
@@ -15,7 +16,7 @@ Room & Food Service:
 - Available 24/7 via room phone or chatbot
 - Food can be ordered until 11:00 PM (including Breakfast, Lunch and Dinner)
 - Room charge is ₹1200 per day(including night) and ₹700 per night(if booking is only for night).
-- Only 4 people are allowed in one room
+
 
 Wi-Fi:
 - Free Wi-Fi available in all rooms
