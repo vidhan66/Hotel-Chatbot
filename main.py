@@ -251,10 +251,12 @@ def book_room(data: Rooms_booking) -> str:
     else:
         price_one_room = nights * price_night
     estimated_total_price = price_one_room * rooms_needed
-
+    preview = "https://www.youtube.com/shorts/bQacaAAU_Z4"
     if confirm is None:
-        return f"You need {rooms_needed} room(s). Estimated cost is ₹{estimated_total_price}. Should I proceed with booking?"
-
+        return (
+        f"You need {rooms_needed} room(s). Estimated cost is ₹{estimated_total_price}.\n\n Room preview- {preview}\n\n"
+        f"Should I proceed with booking?"
+        )
     if not confirm:
         return "✅ Booking cancelled."
 
@@ -267,7 +269,6 @@ def book_room(data: Rooms_booking) -> str:
             VALUES (%s, %s, NULL, %s, %s)
         """, (room_no, check_in, no_of_persons, price_one_room))
     conn.commit()
-    preview = "https://www.youtube.com/shorts/bQacaAAU_Z4"
     if days > 0:
         duration_text = f"{days} day{'s' if days > 1 else ''}"
     else:
@@ -275,8 +276,7 @@ def book_room(data: Rooms_booking) -> str:
 
     return (
         f"✅ Booked {rooms_needed} room(s), room number- {assigned_rooms} from {check_in} for {duration_text}.\n"
-        f"Total cost is ₹{estimated_total_price}.\n\n"
-        f"Room preview: {preview}"
+        f"Total cost is ₹{estimated_total_price}."
     )
 @tool
 def checkout_room(data: CheckoutRoom) -> str:
