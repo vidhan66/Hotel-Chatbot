@@ -19,7 +19,7 @@ from datetime import date
 import math
 
 load_dotenv()
-os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY2")
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY1")
 
 conn = psycopg2.connect(
     dbname=os.getenv("DB_NAME"),
@@ -182,7 +182,7 @@ def get_available_rooms(conn, preferred_floor=None):
     available_rooms = [room for room in all_rooms if room not in booked_rooms]
     return available_rooms
 
-@tool
+@tool(return_direct=True)
 def book_room(data: Rooms_booking) -> str:
     "Handles booking of room in database"
     check_in = data.check_in
@@ -253,12 +253,12 @@ def book_room(data: Rooms_booking) -> str:
     estimated_total_price = price_one_room * rooms_needed
 
     if confirm is None:
-        return f"🛏️ You need {rooms_needed} room(s). Estimated cost is ₹{estimated_total_price}. Should I proceed with booking? (yes/no)"
+        return f"You need {rooms_needed} room(s). Estimated cost is ₹{estimated_total_price}. Should I proceed with booking?"
 
     if not confirm:
         return "✅ Booking cancelled."
 
-    assigned_rooms = available_rooms[:rooms_needed]
+    assigned_rooms = available_rooms[ : rooms_needed]
 
     cursor = conn.cursor()
     for room_no in assigned_rooms:
@@ -267,9 +267,17 @@ def book_room(data: Rooms_booking) -> str:
             VALUES (%s, %s, NULL, %s, %s)
         """, (room_no, check_in, no_of_persons, price_one_room))
     conn.commit()
+    preview = "https://www.youtube.com/shorts/bQacaAAU_Z4"
+    if days > 0:
+        duration_text = f"{days} day{'s' if days > 1 else ''}"
+    else:
+        duration_text = f"{nights} night{'s' if nights > 1 else ''}"
 
-    return f"✅ Booked {rooms_needed} room(s) {assigned_rooms} from {check_in} for {days or nights} day(s)/night(s). Total cost ₹{estimated_total_price}."
-
+    return (
+        f"✅ Booked {rooms_needed} room(s), room number- {assigned_rooms} from {check_in} for {duration_text}.\n"
+        f"Total cost is ₹{estimated_total_price}.\n\n"
+        f"Room preview: {preview}"
+    )
 @tool
 def checkout_room(data: CheckoutRoom) -> str:
     "Handles room checkouts"
